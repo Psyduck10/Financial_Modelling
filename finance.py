@@ -6,7 +6,6 @@ from io import BytesIO
 
 # Financial Calculations
 def calculate_financials(revenue, cogs, operating_expenses, tax_rate):
-    """Calculates basic financials and returns a dictionary."""
     gross_profit = revenue - cogs
     operating_income = gross_profit - operating_expenses
     net_income = operating_income * (1 - tax_rate)
@@ -21,7 +20,6 @@ def calculate_financials(revenue, cogs, operating_expenses, tax_rate):
     }
 
 def generate_cash_flow_statement(financials, depreciation, capex, working_capital_change):
-    """Generates a simple cash flow statement."""
     operating_cash_flow = financials["Net Income"] + depreciation - working_capital_change
     investing_cash_flow = -capex
     total_cash_flow = operating_cash_flow + investing_cash_flow
@@ -33,19 +31,19 @@ def generate_cash_flow_statement(financials, depreciation, capex, working_capita
 
 def calculate_dcf(cash_flows, discount_rate, terminal_growth_rate):
     """Calculates the discounted cash flow (DCF) value."""
-    # Ensure inputs are valid floats
-    cash_flows = [float(cf) for cf in cash_flows]
-    years = len(cash_flows)
     try:
+        cash_flows = [float(cf) for cf in cash_flows]  # Ensure all elements are floats
+        years = len(cash_flows)
         discounted_cash_flows = [
             cf / ((1 + discount_rate) ** year) for year, cf in enumerate(cash_flows, start=1)
         ]
         terminal_value = cash_flows[-1] * (1 + terminal_growth_rate) / (discount_rate - terminal_growth_rate)
         discounted_terminal_value = terminal_value / ((1 + discount_rate) ** years)
-        dcf_value = sum(discounted_cash_flows) + discounted_terminal_value
-        return dcf_value
+        return sum(discounted_cash_flows) + discounted_terminal_value
     except ZeroDivisionError:
         raise ValueError("Discount rate and terminal growth rate must not result in division by zero.")
+    except Exception as e:
+        raise ValueError(f"Error in DCF calculation: {str(e)}")
 
 # Streamlit Interface
 st.title("Comprehensive Financial Modeling Tool")
@@ -80,61 +78,55 @@ cash_flow_forecast = st.sidebar.text_area("Enter Cash Flow Forecast (comma-separ
 discount_rate = st.sidebar.slider("Discount Rate (%)", 0.0, 20.0, 10.0) / 100
 terminal_growth_rate = st.sidebar.slider("Terminal Growth Rate (%)", 0.0, 5.0, 2.0) / 100
 
-if st.sidebar.button("Calculate DCF"):
+# Parse and Validate Cash Flow Forecast
+try:
+    cash_flow_forecast = [float(x.strip()) for x in cash_flow_forecast.split(',') if x.strip()]
+    if not cash_flow_forecast:
+        raise ValueError("Cash flow forecast cannot be empty.")
+except ValueError:
+    st.sidebar.error("Please enter a valid cash flow forecast as comma-separated numbers.")
+    cash_flow_forecast = None  # Set to None if invalid
+
+# DCF Valuation
+if st.sidebar.button("Calculate DCF") and cash_flow_forecast:
     try:
-        # Convert cash flow forecast to numeric values
-        cash_flow_forecast = [float(x.strip()) for x in cash_flow_forecast.split(',') if x.strip()]
-        if not cash_flow_forecast:
-            raise ValueError("Cash flow forecast cannot be empty.")
-        
         dcf_value = calculate_dcf(cash_flow_forecast, discount_rate, terminal_growth_rate)
         st.subheader("DCF Valuation")
         st.write(f"**DCF Value:** ${dcf_value:,.2f}")
     except ValueError as e:
-        st.error(f"Input error: {e}")
+        st.error(f"DCF calculation error: {e}")
 
 # Sensitivity Analysis
 st.sidebar.header("Sensitivity Analysis")
 sensitivity_metric = st.sidebar.selectbox("Sensitivity Metric", ["Discount Rate", "Growth Rate"])
-if sensitivity_metric == "Discount Rate":
-    rates = np.arange(0.05, 0.20, 0.01)
-    try:
-        dcf_values = [calculate_dcf(cash_flow_forecast, rate, terminal_growth_rate) for rate in rates]
-        plt.plot(rates * 100, dcf_values)
-        plt.xlabel("Discount Rate (%)")
-        plt.ylabel("DCF Value ($)")
-        plt.title("DCF Sensitivity to Discount Rate")
-        st.pyplot(plt)
-    except ValueError as e:
-        st.error(f"Sensitivity analysis error: {e}")
 
-elif sensitivity_metric == "Growth Rate":
-    growth_rates = np.arange(0.01, 0.05, 0.005)
-    try:
-        dcf_values = [calculate_dcf(cash_flow_forecast, discount_rate, rate) for rate in growth_rates]
-        plt.plot(growth_rates * 100, dcf_values)
-        plt.xlabel("Growth Rate (%)")
-        plt.ylabel("DCF Value ($)")
-        plt.title("DCF Sensitivity to Growth Rate")
-        st.pyplot(plt)
-    except ValueError as e:
-        st.error(f"Sensitivity analysis error: {e}")
+# Perform Sensitivity Analysis Only if cash_flow_forecast is Valid
+if cash_flow_forecast:
+    if sensitivity_metric == "Discount Rate":
+        rates = np.arange(0.05, 0.20, 0.01)
+        try:
+            dcf_values = [calculate_dcf(cash_flow_forecast, rate, terminal_growth_rate) for rate in rates]
+            plt.plot(rates * 100, dcf_values)
+            plt.xlabel("Discount Rate (%)")
+            plt.ylabel("DCF Value ($)")
+            plt.title("DCF Sensitivity to Discount Rate")
+            st.pyplot(plt)
+        except ValueError as e:
+            st.error(f"Sensitivity analysis error: {e}")
 
-# Export to Excel
-if st.sidebar.button("Export to Excel"):
-    try:
-        data = pd.DataFrame([financials, cash_flows])
-        buffer = BytesIO()
-        with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
-            data.to_excel(writer, index=False, sheet_name="Financial Data")
-        st.download_button(
-            label="Download Excel File",
-            data=buffer,
-            file_name="financial_model.xlsx",
-            mime="application/vnd.ms-excel",
-        )
-    except Exception as e:
-        st.error(f"Export error: {e}")
+    elif sensitivity_metric == "Growth Rate":
+        growth_rates = np.arange(0.01, 0.05, 0.005)
+        try:
+            dcf_values = [calculate_dcf(cash_flow_forecast, discount_rate, rate) for rate in growth_rates]
+            plt.plot(growth_rates * 100, dcf_values)
+            plt.xlabel("Growth Rate (%)")
+            plt.ylabel("DCF Value ($)")
+            plt.title("DCF Sensitivity to Growth Rate")
+            st.pyplot(plt)
+        except ValueError as e:
+            st.error(f"Sensitivity analysis error: {e}")
+else:
+    st.sidebar.error("Please provide a valid cash flow forecast to run sensitivity analysis.")
 
 # Footer
 st.markdown("---")
